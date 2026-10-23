@@ -293,15 +293,29 @@ app.post(
 // TEST BACKEND
 // =========================
 
-app.get("/", (req, res) => {
-  res.json({
-    message: "LearnSphere Backend is Working",
-    mongodb:
-      mongoose.connection.readyState === 1
-        ? "Connected"
-        : "Not Connected",
-    database: mongoose.connection.name || null,
-  });
+// =========================
+// TEST BACKEND
+// =========================
+
+app.get("/", async (req, res) => {
+  try {
+    await connectMongoDB();
+
+    return res.json({
+      message: "LearnSphere Backend is Working",
+      mongodb: "Connected",
+      database: mongoose.connection.name || null,
+    });
+  } catch (error) {
+    console.error("DATABASE STATUS ERROR:", error.message);
+
+    return res.status(503).json({
+      message: "LearnSphere Backend is Working",
+      mongodb: "Not Connected",
+      database: null,
+      error: "Database connection failed",
+    });
+  }
 });
 
 // =========================
