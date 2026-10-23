@@ -1,5 +1,5 @@
 
-const API_BASE_URL = "/api";
+const API_BASE_URL = "https://ai-learning-platform-1-2vma.onrender.com/api";
 
 async function request(path, { method = "POST", body } = {}) {
   let response;
@@ -32,6 +32,7 @@ async function request(path, { method = "POST", body } = {}) {
     data = await response.json();
   } else {
     const text = await response.text();
+
     data = {
       success: false,
       message: text || `Server returned status ${response.status}`,
