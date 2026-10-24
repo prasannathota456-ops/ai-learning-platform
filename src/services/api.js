@@ -1,5 +1,6 @@
 
-const API_BASE_URL = "https://ai-learning-platform-1-2vma.onrender.com/api";
+const API_BASE_URL =
+  "https://ai-learning-platform-1-2vma.onrender.com/api";
 
 async function request(path, { method = "POST", body } = {}) {
   let response;
@@ -7,41 +8,39 @@ async function request(path, { method = "POST", body } = {}) {
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       method,
-      headers: {
-        ...(body !== undefined && {
-          "Content-Type": "application/json",
-        }),
-      },
-      ...(body !== undefined && {
-        body: JSON.stringify(body),
-      }),
+      headers:
+        body !== undefined
+          ? { "Content-Type": "application/json" }
+          : {},
+      ...(body !== undefined
+        ? { body: JSON.stringify(body) }
+        : {}),
     });
   } catch (error) {
     console.error("API connection error:", error);
 
     throw new Error(
-      "Cannot connect to server. Please check the deployed backend.",
+      "Unable to reach the server. Please check your internet connection and try again.",
       { cause: error }
     );
   }
 
-  const contentType = response.headers.get("content-type") || "";
   let data;
 
-  if (contentType.includes("application/json")) {
+  try {
     data = await response.json();
-  } else {
-    const text = await response.text();
-
+  } catch {
     data = {
       success: false,
-      message: text || `Server returned status ${response.status}`,
+      message: `The server returned an invalid response (HTTP ${response.status}).`,
     };
   }
 
   if (!response.ok) {
     throw new Error(
-      data.message || `Request failed with status ${response.status}`
+      data.message ||
+        data.error ||
+        `Request failed (HTTP ${response.status}).`
     );
   }
 
