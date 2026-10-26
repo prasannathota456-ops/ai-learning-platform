@@ -6,11 +6,11 @@ import Avatar from "./pages/avatar";
 import Dashboard from "./pages/Dashboard";
 import Learning from "./pages/learning";
 import Quiz from "./pages/QuizGenarator";
-
 import Achievements from "./pages/Achievements";
 import Progress from "./pages/progress";
 import MyLearning from "./pages/MyLearning";
-import Games from "./pages/Games";
+import WordScramble from "./pages/WordScramble";
+import FormulaBuilder from "./pages/FormulaBuilder";
 import LearningRewards from "./pages/LearningRewards";
 
 export default function App() {
@@ -44,9 +44,12 @@ export default function App() {
           path="/achievements"
           element={<Achievements />}
         />
-        <Route path="/games" element={<Games />} />
+        <Route path="/WordScramble" element={<WordScramble />} />
+        <Route path="/FormulaBuilder" element={<FormulaBuilder />} />
+
         <Route path="/learning-rewards"
          element={<LearningRewards />} />
+        
 
       </Routes>
     </BrowserRouter>
