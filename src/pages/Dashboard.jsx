@@ -486,10 +486,18 @@ export default function Dashboard() {
 
           <div
             className="nav"
-            onClick={() => navigate("/games")}
+            onClick={() => navigate("/WordScramble")}
           >
             <span>🎮</span>
-            <span>Games</span>
+            <span>Word Scramble</span>
+          </div>
+
+          <div
+            className="nav"
+            onClick={() => navigate("/FormulaBuilder")}
+          >
+            <span>🎮</span>
+            <span>Formula Builder</span>
           </div>
 
           <div
