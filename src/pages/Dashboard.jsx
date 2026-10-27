@@ -42,21 +42,43 @@ const getDateKey = (date = new Date()) => {
   return `${year}-${month}-${day}`;
 };
 
-const recordLearningActivity = () => {
+const getUserStorageKeys = (user) => {
+  const userId = String(
+    user._id || user.id || user.email || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  if (!userId) return null;
+
+  const safeId = encodeURIComponent(userId);
+
+  return {
+    historyKey: `learningHistory_${safeId}`,
+    streakKey: `learningStreakDates_${safeId}`,
+  };
+};
+
+const recordLearningActivity = (user) => {
+  const keys = getUserStorageKeys(user);
+  if (!keys) return;
+
   const today = getDateKey();
 
   try {
     const savedDates = JSON.parse(
-      localStorage.getItem("learningStreakDates") || "[]"
+      localStorage.getItem(keys.streakKey) || "[]"
     );
 
-    const dates = Array.isArray(savedDates) ? savedDates : [];
+    const dates = Array.isArray(savedDates)
+      ? savedDates
+      : [];
 
     if (!dates.includes(today)) {
       dates.push(today);
 
       localStorage.setItem(
-        "learningStreakDates",
+        keys.streakKey,
         JSON.stringify(dates)
       );
     }
@@ -84,6 +106,7 @@ export default function Dashboard() {
   const [isPaused, setIsPaused] = useState(false);
 
   const recognitionRef = useRef(null);
+  const speechUtteranceRef = useRef(null);
 
   const savedUser = (() => {
     try {
@@ -118,16 +141,30 @@ export default function Dashboard() {
       if ("speechSynthesis" in window) {
         window.speechSynthesis.cancel();
       }
+
+      speechUtteranceRef.current = null;
     };
   }, []);
 
   const saveLearningHistory = (currentTopic, currentLesson) => {
+    const keys = getUserStorageKeys(savedUser);
+
+    if (!keys) {
+      console.error(
+        "User ID or email not found. History was not saved."
+      );
+      return;
+    }
+
     try {
       const parsed = JSON.parse(
-        localStorage.getItem("learningHistory") || "[]"
+        localStorage.getItem(keys.historyKey) || "[]"
       );
 
-      const oldHistory = Array.isArray(parsed) ? parsed : [];
+      const oldHistory = Array.isArray(parsed)
+        ? parsed
+        : [];
+
       const cleanTopic = currentTopic.trim();
 
       const existingIndex = oldHistory.findIndex(
@@ -150,20 +187,23 @@ export default function Dashboard() {
         updatedHistory[existingIndex] = {
           ...oldItem,
           id: oldItem.id || Date.now(),
-            mongoId: currentLesson?._id || oldItem.mongoId || null,
+          mongoId:
+            currentLesson?._id || oldItem.mongoId || null,
           topic: cleanTopic,
           name: cleanTopic,
           lesson: currentLesson,
           progress: isCompleted ? 100 : 50,
           quizScore: oldItem.quizScore ?? null,
-          status: isCompleted ? "Completed" : "In Progress",
+          status: isCompleted
+            ? "Completed"
+            : "In Progress",
           lastUpdated: new Date().toISOString(),
         };
       } else {
         updatedHistory = [
           {
             id: Date.now(),
-              mongoId: currentLesson?._id || null,
+            mongoId: currentLesson?._id || null,
             topic: cleanTopic,
             name: cleanTopic,
             lesson: currentLesson,
@@ -178,7 +218,7 @@ export default function Dashboard() {
       }
 
       localStorage.setItem(
-        "learningHistory",
+        keys.historyKey,
         JSON.stringify(updatedHistory)
       );
     } catch (err) {
@@ -225,8 +265,13 @@ export default function Dashboard() {
       let finalText = "";
       let interimText = "";
 
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const recognized = event.results[i][0].transcript;
+      for (
+        let i = event.resultIndex;
+        i < event.results.length;
+        i++
+      ) {
+        const recognized =
+          event.results[i][0].transcript;
 
         if (event.results[i].isFinal) {
           finalText += recognized;
@@ -294,6 +339,7 @@ export default function Dashboard() {
       window.speechSynthesis.cancel();
     }
 
+    speechUtteranceRef.current = null;
     setIsSpeaking(false);
     setIsPaused(false);
   };
@@ -317,8 +363,8 @@ export default function Dashboard() {
 
     try {
       const { response, data } = await generateLesson({
-          topic: topic.trim(),
-          language,
+        topic: topic.trim(),
+        language,
       });
 
       if (!response.ok) {
@@ -328,7 +374,7 @@ export default function Dashboard() {
       }
 
       setLesson(data);
-      recordLearningActivity();
+      recordLearningActivity(savedUser);
       saveLearningHistory(topic, data);
     } catch (err) {
       console.error("Learning Error:", err);
@@ -357,62 +403,231 @@ export default function Dashboard() {
 
     return parts
       .filter(
-        (part) => typeof part === "string" && part.trim()
+        (part) =>
+          typeof part === "string" && part.trim()
       )
       .join(". ");
   };
 
+  // SPEECH: Read the lesson in the selected language.
   const speakLesson = () => {
     if (!("speechSynthesis" in window)) {
       setVoiceError(
-        "Text-to-speech is not supported in this browser."
+        "Audio is not supported in this browser. Please use Google Chrome."
       );
       return;
     }
 
     const text = getLessonText();
 
-    if (!text) return;
+    if (!text.trim()) {
+      setVoiceError("No lesson text available to read.");
+      return;
+    }
 
-    window.speechSynthesis.cancel();
+    const synth = window.speechSynthesis;
 
-    const utterance = new SpeechSynthesisUtterance(text);
-
-    utterance.lang = language;
-    utterance.rate = 0.9;
-    utterance.pitch = 1;
-
-    utterance.onstart = () => {
-      setIsSpeaking(true);
-      setIsPaused(false);
-      setVoiceError("");
+    const settings = {
+      "en-US": {
+        name: "English",
+        prefix: "en",
+        rate: 0.9,
+      },
+      "te-IN": {
+        name: "Telugu",
+        prefix: "te",
+        rate: 0.85,
+      },
+      "hi-IN": {
+        name: "Hindi",
+        prefix: "hi",
+        rate: 0.85,
+      },
     };
 
-    utterance.onend = () => {
-      setIsSpeaking(false);
-      setIsPaused(false);
+    const selected = settings[language];
+
+    if (!selected) {
+      setVoiceError("Please select a supported language.");
+      return;
+    }
+
+    // Cancel old audio before starting new audio.
+    synth.cancel();
+
+    speechUtteranceRef.current = null;
+    setVoiceError("");
+    setIsSpeaking(false);
+    setIsPaused(false);
+
+    let started = false;
+    let finished = false;
+    let voicesChangedHandler = null;
+    let voiceWaitTimer = null;
+    let utterance = null;
+
+    const cleanup = () => {
+      if (voicesChangedHandler) {
+        synth.removeEventListener(
+          "voiceschanged",
+          voicesChangedHandler
+        );
+        voicesChangedHandler = null;
+      }
+
+      if (voiceWaitTimer) {
+        window.clearTimeout(voiceWaitTimer);
+        voiceWaitTimer = null;
+      }
     };
 
-    utterance.onerror = () => {
-      setIsSpeaking(false);
-      setIsPaused(false);
+    const playLesson = () => {
+      if (started || finished) return;
 
-      setVoiceError(
-        "Could not play this voice. Your device may not have a voice for this language."
-      );
+      const voices = synth.getVoices();
+
+      // Prefer a voice matching the selected language.
+      const matchingVoice =
+        voices.find(
+          (voice) =>
+            voice.lang.toLowerCase() ===
+            language.toLowerCase()
+        ) ||
+        voices.find((voice) =>
+          voice.lang
+            .toLowerCase()
+            .startsWith(selected.prefix + "-")
+        );
+
+      utterance = new SpeechSynthesisUtterance(text);
+
+      utterance.lang = language;
+      utterance.rate = selected.rate;
+      utterance.pitch = 1;
+
+      // If available, use the selected language's voice.
+      // Otherwise, let the browser try its default voice.
+      if (matchingVoice) {
+        utterance.voice = matchingVoice;
+      }
+
+      speechUtteranceRef.current = utterance;
+
+      utterance.onstart = () => {
+        started = true;
+        setIsSpeaking(true);
+        setIsPaused(false);
+        setVoiceError("");
+        cleanup();
+      };
+
+      utterance.onend = () => {
+        finished = true;
+
+        if (speechUtteranceRef.current === utterance) {
+          speechUtteranceRef.current = null;
+          setIsSpeaking(false);
+          setIsPaused(false);
+        }
+
+        cleanup();
+      };
+
+      utterance.onerror = (event) => {
+        finished = true;
+
+        const isCurrent =
+          speechUtteranceRef.current === utterance;
+
+        if (isCurrent) {
+          speechUtteranceRef.current = null;
+          setIsSpeaking(false);
+          setIsPaused(false);
+        }
+
+        cleanup();
+
+        // These errors are normal when audio is stopped
+        // or replaced by another utterance.
+        if (
+          event.error === "interrupted" ||
+          event.error === "canceled"
+        ) {
+          return;
+        }
+
+        if (isCurrent) {
+          setVoiceError(
+            `Unable to play ${selected.name} audio. Check your browser or device speech settings.`
+          );
+        }
+
+        console.error(
+          "Speech playback error:",
+          event.error
+        );
+      };
+
+      synth.speak(utterance);
     };
 
-    window.speechSynthesis.speak(utterance);
+    const availableVoices = synth.getVoices();
+
+    if (availableVoices.length > 0) {
+      // Wait briefly after cancel() so the previous audio
+      // doesn't interrupt the new utterance.
+      window.setTimeout(() => {
+        if (!finished) {
+          playLesson();
+        }
+      }, 150);
+
+      return;
+    }
+
+    // Some browsers load their voices asynchronously.
+    voicesChangedHandler = () => {
+      if (synth.getVoices().length > 0 && !started && !finished) {
+        cleanup();
+        playLesson();
+      }
+    };
+
+    synth.addEventListener(
+      "voiceschanged",
+      voicesChangedHandler
+    );
+
+    voiceWaitTimer = window.setTimeout(() => {
+      if (started || finished) return;
+
+      cleanup();
+
+      if (synth.getVoices().length > 0) {
+        playLesson();
+      } else {
+        finished = true;
+
+        setIsSpeaking(false);
+        setIsPaused(false);
+
+        setVoiceError(
+          `No speech voices are available for ${selected.name}. Check your browser or device speech settings.`
+        );
+      }
+    }, 3000);
   };
 
   const pauseLessonSpeech = () => {
     if (!("speechSynthesis" in window)) return;
 
-    if (window.speechSynthesis.paused) {
-      window.speechSynthesis.resume();
+    const synth = window.speechSynthesis;
+
+    if (synth.paused) {
+      synth.resume();
       setIsPaused(false);
-    } else {
-      window.speechSynthesis.pause();
+    } else if (synth.speaking) {
+      synth.pause();
       setIsPaused(true);
     }
   };
@@ -499,20 +714,15 @@ export default function Dashboard() {
             <span>🎮</span>
             <span>Formula Builder</span>
           </div>
-          
-
-          
 
           <div
             className="nav"
             onClick={() => navigate("/learning-rewards")}
-
           >
             <span>🎡</span>
             <span>Learning Rewards</span>
           </div>
 
-          {/* LOGOUT */}
           <Logout />
         </nav>
 

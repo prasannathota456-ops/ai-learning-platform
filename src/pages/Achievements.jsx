@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Achievements.css";
@@ -30,6 +29,35 @@ const readArray = (key) => {
   }
 };
 
+// Get the currently logged-in user's information.
+const getLoggedInUser = () => {
+  try {
+    return JSON.parse(localStorage.getItem("loggedInUser") || "{}");
+  } catch {
+    return {};
+  }
+};
+
+// Every account gets its own certificate storage key.
+const getUserIdentity = () => {
+  const user = getLoggedInUser();
+
+  const identity =
+    user.email ||
+    user._id ||
+    user.id ||
+    user.userId ||
+    user.name;
+
+  if (!identity) return "guest";
+
+  return String(identity).trim().toLowerCase();
+};
+
+const getUserCertificateKey = () => {
+  return `${CERTIFICATES_KEY}:${encodeURIComponent(getUserIdentity())}`;
+};
+
 const getStreak = (dates) => {
   const dateSet = new Set(dates);
   let current = getDateKey();
@@ -56,7 +84,11 @@ const getLongestStreak = (dates) => {
   let previous = null;
 
   sorted.forEach((date) => {
-    count = previous && shiftDate(previous, 1) === date ? count + 1 : 1;
+    count =
+      previous && shiftDate(previous, 1) === date
+        ? count + 1
+        : 1;
+
     longest = Math.max(longest, count);
     previous = date;
   });
@@ -65,18 +97,15 @@ const getLongestStreak = (dates) => {
 };
 
 const isCompleted = (item) =>
-  Number(item?.progress) >= 100 || item?.status === "Completed";
+  Number(item?.progress) >= 100 ||
+  item?.status === "Completed";
 
 const getSubject = (item) =>
   item?.subject || item?.category || item?.course || "";
 
 const getStudentName = () => {
-  try {
-    const user = JSON.parse(localStorage.getItem("loggedInUser") || "{}");
-    return user.name || "Student";
-  } catch {
-    return "Student";
-  }
+  const user = getLoggedInUser();
+  return user.name || "Student";
 };
 
 const getCertificateId = (achievementId, date) => {
@@ -87,18 +116,28 @@ const getCertificateId = (achievementId, date) => {
 export default function Achievements() {
   const navigate = useNavigate();
 
-  const [history, setHistory] = useState(() => readArray(HISTORY_KEY));
-  const [streakDates, setStreakDates] = useState(() => readArray(STREAK_KEY));
-  const [certificates, setCertificates] = useState(() =>
-    readArray(CERTIFICATES_KEY)
+  const [history, setHistory] = useState(() =>
+    readArray(HISTORY_KEY)
   );
-  const [selectedCertificate, setSelectedCertificate] = useState(null);
 
+  const [streakDates, setStreakDates] = useState(() =>
+    readArray(STREAK_KEY)
+  );
+
+  const [certificates, setCertificates] = useState(() =>
+    readArray(getUserCertificateKey())
+  );
+
+  const [selectedCertificate, setSelectedCertificate] =
+    useState(null);
+
+  // Refresh data when the page is revisited or the account changes.
   useEffect(() => {
     const refresh = () => {
       setHistory(readArray(HISTORY_KEY));
       setStreakDates(readArray(STREAK_KEY));
-      setCertificates(readArray(CERTIFICATES_KEY));
+      setCertificates(readArray(getUserCertificateKey()));
+      setSelectedCertificate(null);
     };
 
     window.addEventListener("focus", refresh);
@@ -111,6 +150,7 @@ export default function Achievements() {
   }, []);
 
   const studentName = getStudentName();
+  const userCertificateKey = getUserCertificateKey();
 
   const completedLessons = history.filter(isCompleted).length;
 
@@ -120,13 +160,20 @@ export default function Achievements() {
         .map((item) => Number(item?.quizScore))
         .filter(
           (score) =>
-            Number.isFinite(score) && score >= 0 && score <= 100
+            Number.isFinite(score) &&
+            score >= 0 &&
+            score <= 100
         ),
     [history]
   );
 
-  const highScoreQuizzes = quizScores.filter((score) => score >= 80).length;
-  const excellentQuizzes = quizScores.filter((score) => score >= 90).length;
+  const highScoreQuizzes = quizScores.filter(
+    (score) => score >= 80
+  ).length;
+
+  const excellentQuizzes = quizScores.filter(
+    (score) => score >= 90
+  ).length;
 
   const activeDates = useMemo(() => {
     const dates = new Set(
@@ -161,104 +208,111 @@ export default function Achievements() {
       .map((subject) => subject.toLowerCase())
   ).size;
 
-  const achievementDefinitions = useMemo(() => [
-    {
-      id: "first-step",
-      title: "First Step",
-      description: "Generate your first learning lesson.",
-      icon: "📘",
-      progress: Math.min(history.length, 1),
-      target: 1,
-      unit: "lesson",
-      unlocked: history.length >= 1,
-    },
-    {
-      id: "lesson-master",
-      title: "Lesson Master",
-      description: "Complete 10 lessons successfully.",
-      icon: "🎓",
-      progress: Math.min(completedLessons, 10),
-      target: 10,
-      unit: "lessons",
-      unlocked: completedLessons >= 10,
-    },
-    {
-      id: "streak-star",
-      title: "Consistency Champion",
-      description: "Build a 7-day learning streak.",
-      icon: "🔥",
-      progress: Math.min(longestStreak, 7),
-      target: 7,
-      unit: "days",
-      unlocked: longestStreak >= 7,
-    },
-    {
-      id: "quiz-champion",
-      title: "Quiz Champion",
-      description: "Score 80% or above in 5 quizzes.",
-      icon: "🎯",
-      progress: Math.min(highScoreQuizzes, 5),
-      target: 5,
-      unit: "quizzes",
-      unlocked: highScoreQuizzes >= 5,
-    },
-    {
-      id: "academic-excellence",
-      title: "Academic Excellence",
-      description: "Score 90% or above in 3 quizzes.",
-      icon: "🏆",
-      progress: Math.min(excellentQuizzes, 3),
-      target: 3,
-      unit: "quizzes",
-      unlocked: excellentQuizzes >= 3,
-    },
-    {
-      id: "knowledge-explorer",
-      title: "Knowledge Explorer",
-      description: "Explore 5 different subjects.",
-      icon: "🧭",
-      progress: Math.min(subjectCount, 5),
-      target: 5,
-      unit: "subjects",
-      unlocked: subjectCount >= 5,
-    },
-    {
-      id: "learning-legend",
-      title: "Learning Legend",
-      description: "Complete 25 lessons.",
-      icon: "⭐",
-      progress: Math.min(completedLessons, 25),
-      target: 25,
-      unit: "lessons",
-      unlocked: completedLessons >= 25,
-    },
-    {
-      id: "dedicated-learner",
-      title: "Dedicated Learner",
-      description: "Reach a 14-day learning streak.",
-      icon: "💎",
-      progress: Math.min(longestStreak, 14),
-      target: 14,
-      unit: "days",
-      unlocked: longestStreak >= 14,
-    },
-  ], [
-    completedLessons,
-    history.length,
-    highScoreQuizzes,
-    excellentQuizzes,
-    longestStreak,
-    subjectCount,
-  ]);
+  const achievementDefinitions = useMemo(
+    () => [
+      {
+        id: "first-step",
+        title: "First Step",
+        description: "Generate your first learning lesson.",
+        icon: "📘",
+        progress: Math.min(history.length, 1),
+        target: 1,
+        unit: "lesson",
+        unlocked: history.length >= 1,
+      },
+      {
+        id: "lesson-master",
+        title: "Lesson Master",
+        description: "Complete 10 lessons successfully.",
+        icon: "🎓",
+        progress: Math.min(completedLessons, 10),
+        target: 10,
+        unit: "lessons",
+        unlocked: completedLessons >= 10,
+      },
+      {
+        id: "streak-star",
+        title: "Consistency Champion",
+        description: "Build a 7-day learning streak.",
+        icon: "🔥",
+        progress: Math.min(longestStreak, 7),
+        target: 7,
+        unit: "days",
+        unlocked: longestStreak >= 7,
+      },
+      {
+        id: "quiz-champion",
+        title: "Quiz Champion",
+        description: "Score 80% or above in 5 quizzes.",
+        icon: "🎯",
+        progress: Math.min(highScoreQuizzes, 5),
+        target: 5,
+        unit: "quizzes",
+        unlocked: highScoreQuizzes >= 5,
+      },
+      {
+        id: "academic-excellence",
+        title: "Academic Excellence",
+        description: "Score 90% or above in 3 quizzes.",
+        icon: "🏆",
+        progress: Math.min(excellentQuizzes, 3),
+        target: 3,
+        unit: "quizzes",
+        unlocked: excellentQuizzes >= 3,
+      },
+      {
+        id: "knowledge-explorer",
+        title: "Knowledge Explorer",
+        description: "Explore 5 different subjects.",
+        icon: "🧭",
+        progress: Math.min(subjectCount, 5),
+        target: 5,
+        unit: "subjects",
+        unlocked: subjectCount >= 5,
+      },
+      {
+        id: "learning-legend",
+        title: "Learning Legend",
+        description: "Complete 25 lessons.",
+        icon: "⭐",
+        progress: Math.min(completedLessons, 25),
+        target: 25,
+        unit: "lessons",
+        unlocked: completedLessons >= 25,
+      },
+      {
+        id: "dedicated-learner",
+        title: "Dedicated Learner",
+        description: "Reach a 14-day learning streak.",
+        icon: "💎",
+        progress: Math.min(longestStreak, 14),
+        target: 14,
+        unit: "days",
+        unlocked: longestStreak >= 14,
+      },
+    ],
+    [
+      completedLessons,
+      history.length,
+      highScoreQuizzes,
+      excellentQuizzes,
+      longestStreak,
+      subjectCount,
+    ]
+  );
 
+  // Only this logged-in user's certificates are loaded and displayed.
   const availableCertificates = useMemo(() => {
-    const saved = [...readArray(CERTIFICATES_KEY), ...certificates];
+    const saved = [...certificates];
     const savedById = new Map(
       saved.map((item) => [item.achievementId, item])
     );
 
     achievementDefinitions.forEach((achievement) => {
-      if (achievement.unlocked && !savedById.has(achievement.id)) {
+      if (
+        achievement.unlocked &&
+        !savedById.has(achievement.id)
+      ) {
         const date = getDateKey();
 
         savedById.set(achievement.id, {
@@ -266,20 +320,32 @@ export default function Achievements() {
           title: achievement.title,
           studentName,
           date,
-          certificateId: getCertificateId(achievement.id, date),
+          certificateId: getCertificateId(
+            achievement.id,
+            date
+          ),
         });
       }
     });
 
-    return [...savedById.values()];
-  }, [achievementDefinitions, certificates, studentName]);
+    // Never display another account's certificate name.
+    return [...savedById.values()].map((certificate) => ({
+      ...certificate,
+      studentName,
+    }));
+  }, [
+    achievementDefinitions,
+    certificates,
+    studentName,
+  ]);
 
+  // Save certificates under the current account's unique key.
   useEffect(() => {
     localStorage.setItem(
-      CERTIFICATES_KEY,
+      userCertificateKey,
       JSON.stringify(availableCertificates)
     );
-  }, [availableCertificates]);
+  }, [availableCertificates, userCertificateKey]);
 
   const unlockedCount = achievementDefinitions.filter(
     (item) => item.unlocked
@@ -294,7 +360,10 @@ export default function Achievements() {
     const saved = getSavedCertificate(achievement.id);
 
     if (achievement.unlocked && saved) {
-      setSelectedCertificate(saved);
+      setSelectedCertificate({
+        ...saved,
+        studentName,
+      });
     }
   };
 
@@ -326,15 +395,20 @@ export default function Achievements() {
       <main className="ach-main">
         <section className="ach-hero">
           <div>
-            <span className="ach-eyebrow">YOUR LEARNING JOURNEY</span>
+            <span className="ach-eyebrow">
+              YOUR LEARNING JOURNEY
+            </span>
+
             <h1>
               Your <span>Achievements</span>
             </h1>
+
             <p>
-              Celebrate your progress, unlock milestones, and earn certificates
-              for your accomplishments.
+              Celebrate your progress, unlock milestones, and earn
+              certificates for your accomplishments.
             </p>
           </div>
+
           <div className="ach-hero-icon">🏆</div>
         </section>
 
@@ -343,7 +417,9 @@ export default function Achievements() {
             <span className="ach-stat-icon gold">🏅</span>
             <div>
               <span>Badges unlocked</span>
-              <strong>{unlockedCount}/{achievementDefinitions.length}</strong>
+              <strong>
+                {unlockedCount}/{achievementDefinitions.length}
+              </strong>
             </div>
           </article>
 
@@ -375,39 +451,53 @@ export default function Achievements() {
         <section className="ach-overview">
           <div className="ach-overview-top">
             <div>
-              <span className="ach-eyebrow">YOUR COLLECTION</span>
+              <span className="ach-eyebrow">
+                YOUR COLLECTION
+              </span>
               <h2>Achievement progress</h2>
             </div>
+
             <strong>
               {Math.round(
-                (unlockedCount / achievementDefinitions.length) * 100
-              )}%
+                (unlockedCount / achievementDefinitions.length) *
+                  100
+              )}
+              %
             </strong>
           </div>
 
           <div className="ach-progress-track">
             <div
               style={{
-                width: `${(unlockedCount / achievementDefinitions.length) * 100}%`,
+                width: `${
+                  (unlockedCount / achievementDefinitions.length) *
+                  100
+                }%`,
               }}
             />
           </div>
 
           <p>
-            {unlockedCount} of {achievementDefinitions.length} achievements
-            unlocked. Keep learning to earn more certificates.
+            {unlockedCount} of {achievementDefinitions.length}{" "}
+            achievements unlocked. Keep learning to earn more
+            certificates.
           </p>
         </section>
 
         <section className="ach-streak">
           <div className="ach-streak-icon">🔥</div>
+
           <div className="ach-streak-copy">
-            <span className="ach-eyebrow">CONSISTENCY RECORD</span>
+            <span className="ach-eyebrow">
+              CONSISTENCY RECORD
+            </span>
             <h2>Keep your learning streak alive</h2>
             <p>
-              Current streak: {currentStreak} days. Best streak: {longestStreak} days.
+              Current streak: {currentStreak} days. Best streak:{" "}
+              {longestStreak} days.
             </p>
           </div>
+
           <button onClick={() => navigate("/progress")}>
             View Progress →
           </button>
@@ -417,26 +507,45 @@ export default function Achievements() {
           <div>
             <span className="ach-eyebrow">BADGE COLLECTION</span>
             <h2>Your achievements</h2>
-            <p>Unlocked achievements include a printable certificate.</p>
+            <p>
+              Unlocked achievements include a printable certificate.
+            </p>
           </div>
-          <span className="ach-total">{unlockedCount} UNLOCKED</span>
+
+          <span className="ach-total">
+            {unlockedCount} UNLOCKED
+          </span>
         </section>
 
         <section className="ach-grid">
           {achievementDefinitions.map((item) => {
-            const percent = Math.round((item.progress / item.target) * 100);
+            const percent = Math.round(
+              (item.progress / item.target) * 100
+            );
+
             const savedCertificate = getSavedCertificate(item.id);
 
             return (
               <article
-                className={`ach-card ${item.unlocked ? "is-unlocked" : "is-locked"}`}
+                className={`ach-card ${
+                  item.unlocked ? "is-unlocked" : "is-locked"
+                }`}
                 key={item.id}
               >
                 <div className="ach-card-top">
-                  <div className={`ach-badge-icon ${item.unlocked ? "earned" : ""}`}>
+                  <div
+                    className={`ach-badge-icon ${
+                      item.unlocked ? "earned" : ""
+                    }`}
+                  >
                     {item.unlocked ? item.icon : "🔒"}
                   </div>
-                  <span className={`ach-status ${item.unlocked ? "unlocked" : "locked"}`}>
+
+                  <span
+                    className={`ach-status ${
+                      item.unlocked ? "unlocked" : "locked"
+                    }`}
+                  >
                     {item.unlocked ? "✓ UNLOCKED" : "LOCKED"}
                   </span>
                 </div>
@@ -446,7 +555,9 @@ export default function Achievements() {
 
                 <div className="ach-card-progress-label">
                   <span>Progress</span>
-                  <strong>{item.progress}/{item.target} {item.unit}</strong>
+                  <strong>
+                    {item.progress}/{item.target} {item.unit}
+                  </strong>
                 </div>
 
                 <div className="ach-card-track">
@@ -454,7 +565,11 @@ export default function Achievements() {
                 </div>
 
                 <div className="ach-card-footer">
-                  <span>{item.unlocked ? "Milestone achieved" : "Keep going"}</span>
+                  <span>
+                    {item.unlocked
+                      ? "Milestone achieved"
+                      : "Keep going"}
+                  </span>
                   <span>{percent}%</span>
                 </div>
 
@@ -480,8 +595,8 @@ export default function Achievements() {
             <div>📖</div>
             <h2>Your journey starts here</h2>
             <p>
-              Generate your first lesson from the Dashboard to begin earning
-              achievements.
+              Generate your first lesson from the Dashboard to begin
+              earning achievements.
             </p>
             <button onClick={() => navigate("/dashboard")}>
               Start learning →
@@ -491,7 +606,9 @@ export default function Achievements() {
 
         <footer className="ach-footer">
           <span>LEARNSPHERE</span>
-          <span>Small steps today. Great achievements tomorrow.</span>
+          <span>
+            Small steps today. Great achievements tomorrow.
+          </span>
         </footer>
       </main>
 
@@ -512,6 +629,7 @@ export default function Achievements() {
               >
                 ✕ Close
               </button>
+
               <button
                 className="ach-print-button"
                 onClick={printCertificate}
@@ -523,28 +641,51 @@ export default function Achievements() {
             <div className="ach-certificate">
               <div className="ach-certificate-inner">
                 <div className="ach-certificate-logo">L</div>
-                <p className="ach-certificate-brand">LEARNSPHERE</p>
-                <p className="ach-certificate-overline">CERTIFICATE OF ACHIEVEMENT</p>
+
+                <p className="ach-certificate-brand">
+                  LEARNSPHERE
+                </p>
+
+                <p className="ach-certificate-overline">
+                  CERTIFICATE OF ACHIEVEMENT
+                </p>
+
                 <div className="ach-certificate-line" />
+
                 <h1>Certificate</h1>
                 <h2>of Achievement</h2>
-                <p className="ach-certificate-presented">This certificate is proudly presented to</p>
-                <h3>{selectedCertificate.studentName}</h3>
-                <p className="ach-certificate-description">
-                  In recognition of successfully achieving the learning milestone
+
+                <p className="ach-certificate-presented">
+                  This certificate is proudly presented to
                 </p>
-                <h2 className="ach-certificate-title">{selectedCertificate.title}</h2>
+
+                <h3>{selectedCertificate.studentName}</h3>
+
                 <p className="ach-certificate-description">
-                  For dedication, consistency, and commitment to learning.
+                  In recognition of successfully achieving the
+                  learning milestone
+                </p>
+
+                <h2 className="ach-certificate-title">
+                  {selectedCertificate.title}
+                </h2>
+
+                <p className="ach-certificate-description">
+                  For dedication, consistency, and commitment to
+                  learning.
                 </p>
 
                 <div className="ach-certificate-bottom">
                   <div>
-                    <span className="ach-signature">LearnSphere</span>
+                    <span className="ach-signature">
+                      LearnSphere
+                    </span>
                     <div className="ach-sign-line" />
                     <small>Learning Platform</small>
                   </div>
+
                   <div className="ach-certificate-seal">★</div>
+
                   <div>
                     <strong>
                       {new Date(

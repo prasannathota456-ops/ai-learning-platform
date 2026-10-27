@@ -47,7 +47,6 @@ export default function App() {
         />
         <Route path="/WordScramble" element={<WordScramble />} />
         <Route path="/FormulaBuilder" element={<FormulaBuilder />} />
-        
         <Route path="/learning-rewards"
          element={<LearningRewards />} />
         

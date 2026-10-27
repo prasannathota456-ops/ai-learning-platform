@@ -3,6 +3,36 @@ import { useLocation, useNavigate } from "react-router-dom";
 import "./QuizGenarator.css";
 import { generateQuiz as requestQuiz } from "../services/api";
 
+// ACCOUNT-SPECIFIC STORAGE KEYS
+function getUserStorageKeys(user) {
+  const userId = user?._id || user?.id || user?.email;
+
+  if (!userId) return null;
+
+  const safeUserId = String(userId)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "_");
+
+  return {
+    historyKey: `learningHistory_${safeUserId}`,
+    streakKey: `learningStreakDates_${safeUserId}`,
+    goalKey: `learningWeeklyGoal_${safeUserId}`,
+  };
+}
+
+// GET CURRENT USER
+function getLoggedInUser() {
+  try {
+    return JSON.parse(
+      localStorage.getItem("loggedInUser") || "{}"
+    );
+  } catch {
+    return {};
+  }
+}
+
+// FIND CORRECT ANSWER
 function getCorrectIndex(question) {
   if (!Array.isArray(question.options)) return -1;
 
@@ -35,6 +65,7 @@ function getCorrectIndex(question) {
   return -1;
 }
 
+// SHUFFLE OPTIONS
 function shuffleOptions(question) {
   const options = question.options;
 
@@ -93,8 +124,8 @@ export default function QuizGenarator() {
 
     try {
       const { response, data } = await requestQuiz({
-          topic: topic.trim(),
-          language: language,
+        topic: topic.trim(),
+        language,
       });
 
       if (!response.ok) {
@@ -121,7 +152,6 @@ export default function QuizGenarator() {
         throw new Error("The quiz contains invalid questions.");
       }
 
-      // Randomize option positions for each question.
       const shuffledQuestions = data.questions.map(
         shuffleOptions
       );
@@ -163,14 +193,24 @@ export default function QuizGenarator() {
     }));
   };
 
-  // SAVE RESULT
+  // SAVE QUIZ RESULT TO CURRENT USER'S HISTORY
   const saveQuizResult = (finalScore) => {
     try {
+      const savedUser = getLoggedInUser();
+      const keys = getUserStorageKeys(savedUser);
+
+      if (!keys) {
+        console.error(
+          "User ID or email not found. Quiz result was not saved."
+        );
+        return false;
+      }
+
       const history = JSON.parse(
-        localStorage.getItem("learningHistory") || "[]"
+        localStorage.getItem(keys.historyKey) || "[]"
       );
 
-      if (!Array.isArray(history)) return;
+      if (!Array.isArray(history)) return false;
 
       const cleanTopic = topic.trim().toLowerCase();
 
@@ -182,17 +222,21 @@ export default function QuizGenarator() {
       );
 
       if (index === -1) {
-        console.log("Topic not found in learning history.");
-        return;
+        console.error(
+          "Topic not found in this user's learning history.",
+          cleanTopic
+        );
+        return false;
       }
 
       const updatedHistory = [...history];
+      const oldItem = updatedHistory[index];
 
       updatedHistory[index] = {
-        ...updatedHistory[index],
-        topic,
-        name: topic,
-        lesson: updatedHistory[index].lesson || lesson,
+        ...oldItem,
+        topic: topic.trim(),
+        name: topic.trim(),
+        lesson: oldItem.lesson || lesson,
         progress: 100,
         quizScore: finalScore,
         status: "Completed",
@@ -201,19 +245,21 @@ export default function QuizGenarator() {
       };
 
       localStorage.setItem(
-        "learningHistory",
+        keys.historyKey,
         JSON.stringify(updatedHistory)
       );
 
       console.log("Quiz result saved successfully.");
+      return true;
     } catch (err) {
       console.error("Save result error:", err);
+      return false;
     }
   };
 
-  // SUBMIT QUIZ AND CALCULATE OVERALL SCORE
+  // SUBMIT QUIZ AND CALCULATE SCORE
   const submitQuiz = () => {
-    if (!quiz) return;
+    if (!quiz || submitted) return;
 
     const unanswered = quiz.questions.some(
       (_, index) => selectedAnswers[index] === undefined
@@ -242,24 +288,34 @@ export default function QuizGenarator() {
 
     setCorrectCount(correct);
     setScore(finalScore);
-    setSubmitted(true);
 
-    // ADDED: Save the latest quiz result for Learning Rewards
+    // SAVE RESULT FOR LEARNING REWARDS
     try {
-      localStorage.setItem(
-        "latestQuizResult",
-        JSON.stringify({
-          topic: topic,
-          score: finalScore,
-          completedAt: new Date().toISOString(),
-        })
-      );
+      const savedUser = getLoggedInUser();
+      const keys = getUserStorageKeys(savedUser);
+
+      if (keys) {
+        localStorage.setItem(
+          `latestQuizResult_${String(
+            savedUser._id || savedUser.id || savedUser.email
+          )
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9_-]/g, "_")}`,
+          JSON.stringify({
+            topic: topic.trim(),
+            score: finalScore,
+            completedAt: new Date().toISOString(),
+          })
+        );
+      }
     } catch (err) {
       console.error("Latest quiz result save error:", err);
     }
 
-    // Original history-saving function remains unchanged
+    // UPDATE HISTORY BEFORE SHOWING RESULT
     saveQuizResult(finalScore);
+    setSubmitted(true);
   };
 
   // RETAKE QUIZ

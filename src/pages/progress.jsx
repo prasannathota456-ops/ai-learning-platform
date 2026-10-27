@@ -2,9 +2,42 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./progress.css";
 
-const HISTORY_KEY = "learningHistory";
-const STREAK_KEY = "learningStreakDates";
-const GOAL_KEY = "learningWeeklyGoal";
+const getUserStorageKeys = () => {
+  try {
+    const user = JSON.parse(
+      localStorage.getItem("loggedInUser") || "{}"
+    );
+
+    // Email or unique user ID should identify each account.
+    const userId = String(
+      user._id || user.id || user.email || ""
+    )
+      .trim()
+      .toLowerCase();
+
+    if (!userId) {
+      return {
+        HISTORY_KEY: null,
+        STREAK_KEY: null,
+        GOAL_KEY: null,
+      };
+    }
+
+    const safeId = encodeURIComponent(userId);
+
+    return {
+      HISTORY_KEY: `learningHistory_${safeId}`,
+      STREAK_KEY: `learningStreakDates_${safeId}`,
+      GOAL_KEY: `learningWeeklyGoal_${safeId}`,
+    };
+  } catch {
+    return {
+      HISTORY_KEY: null,
+      STREAK_KEY: null,
+      GOAL_KEY: null,
+    };
+  }
+};
 
 const getDateKey = (date = new Date()) => {
   const year = date.getFullYear();
@@ -14,6 +47,8 @@ const getDateKey = (date = new Date()) => {
   return `${year}-${month}-${day}`;
 };
 const readArray = (key) => {
+  if (!key) return [];
+
   try {
     const value = JSON.parse(localStorage.getItem(key) || "[]");
     return Array.isArray(value) ? value : [];
@@ -83,6 +118,7 @@ const getLongestStreak = (dates) => {
 
 export default function Progress() {
   const navigate = useNavigate();
+  const { HISTORY_KEY, STREAK_KEY, GOAL_KEY } = getUserStorageKeys();
 
   const [history, setHistory] = useState(() =>
     readArray(HISTORY_KEY)
@@ -96,7 +132,9 @@ export default function Progress() {
   const [filter, setFilter] = useState("All");
 
   const [weeklyGoal, setWeeklyGoal] = useState(() => {
-    const saved = Number(localStorage.getItem(GOAL_KEY));
+    const saved = GOAL_KEY
+      ? Number(localStorage.getItem(GOAL_KEY))
+      : NaN;
     return saved >= 1 && saved <= 6 ? saved : 5;
   });
 
@@ -117,7 +155,7 @@ export default function Progress() {
       window.removeEventListener("focus", refresh);
       window.removeEventListener("storage", refresh);
     };
-  }, []);
+  }, [HISTORY_KEY, STREAK_KEY]);
 
   // Record learning activity only if it is already present in history.
   // Opening this page does not create a new streak day.
@@ -291,9 +329,10 @@ export default function Progress() {
     const goal = Number(value);
 
     setWeeklyGoal(goal);
-    localStorage.setItem(GOAL_KEY, String(goal));
+    if (GOAL_KEY) {
+      localStorage.setItem(GOAL_KEY, String(goal));
+    }
   };
-
   const formattedDate = today.toLocaleDateString("en-IN", {
     weekday: "long",
     day: "numeric",
