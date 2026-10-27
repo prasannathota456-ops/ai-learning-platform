@@ -499,10 +499,14 @@ export default function Dashboard() {
             <span>🎮</span>
             <span>Formula Builder</span>
           </div>
+          
+
+          
 
           <div
             className="nav"
             onClick={() => navigate("/learning-rewards")}
+
           >
             <span>🎡</span>
             <span>Learning Rewards</span>

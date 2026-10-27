@@ -11,6 +11,7 @@ import Progress from "./pages/progress";
 import MyLearning from "./pages/MyLearning";
 import WordScramble from "./pages/WordScramble";
 import FormulaBuilder from "./pages/FormulaBuilder";
+
 import LearningRewards from "./pages/LearningRewards";
 
 export default function App() {
@@ -46,7 +47,7 @@ export default function App() {
         />
         <Route path="/WordScramble" element={<WordScramble />} />
         <Route path="/FormulaBuilder" element={<FormulaBuilder />} />
-
+        
         <Route path="/learning-rewards"
          element={<LearningRewards />} />
         

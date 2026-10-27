@@ -631,3 +631,18 @@
     transition-duration: 0.01ms !important;
   }
 }
+/* Formula pieces move only through drag and drop */
+.fb-pieces .fb-piece {
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.fb-pieces .fb-piece:active {
+  cursor: grabbing;
+}
+
+.fb-answer .fb-placed {
+  cursor: pointer;
+}
